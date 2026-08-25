@@ -70,18 +70,7 @@ Zotero *Tools → Developer → Run JavaScript* → 勾选 **Run as async functi
 ### 4. 定制说明
 
 分类标准越具体，LLM 判定越准（写关键词、典型方法、代表对象）。拿不准的条目 LLM 会返回
-`null`（宁缺勿滥），保持原状，适合事后人工处理。`taxonomy.json` 是个人配置，已被
-`.gitignore` 排除，不会上传。
-
-## 同类项目 (See also)
-
-- [justinfjx/zotero-ai-collection](https://github.com/justinfjx/zotero-ai-collection) — Zotero 插件（GUI），右键"AI 智能分类"，从已有分类树推荐路径，带确认对话框
-- [Mor-Li/zotero-llm-classify](https://github.com/Mor-Li/zotero-llm-classify) — LLM 自动归类脚本集
-- [leike0813/zotero-agents](https://github.com/leike0813/zotero-agents) — agentic 工作台，功能更全更重
-- [joaopn/zotero_llm](https://github.com/joaopn/zotero_llm) — 简单的 LLM 整理助手
-
-本工具的差异点：`--survey` 从库抽样归纳分类树初稿、`--scope/--subset` 双重范围控制、
-不依赖任何第三方插件（本地 API 读 + Run JavaScript 写）、API key 只走环境变量。
+`null`（宁缺勿滥），保持原状，适合事后人工处理。
 
 ## 文件一览
 
