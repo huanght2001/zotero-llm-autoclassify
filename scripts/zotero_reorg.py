@@ -3,7 +3,8 @@
 zotero_reorg.py — Zotero 全库按工作内容重组 (新旧并存: 只新增新分类, 不动旧分类)
 
 用法:
-  $env:ZOTERO_LLM_API_KEY = "sk-..."
+  1. 复制 taxonomy.example.json 为 taxonomy.json, 改成你自己的分类体系
+  2. $env:ZOTERO_LLM_API_KEY = "sk-..."
   python zotero_reorg.py            # 生成方案 zotero_reorg_plan.json (dry-run)
   python zotero_reorg.py --apply    # 尝试本地API写(大概率501, 用自包含JS替代)
 
@@ -12,32 +13,19 @@ zotero_reorg.py — Zotero 全库按工作内容重组 (新旧并存: 只新增�
 import json, os, sys, time, urllib.request
 
 ZOTERO_LOCAL = "http://127.0.0.1:23119/api/users/0"
-PLAN_FILE    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "zotero_reorg_plan.json")
+BASE_DIR     = os.path.dirname(os.path.abspath(__file__))
+PLAN_FILE    = os.path.join(BASE_DIR, "zotero_reorg_plan.json")
+TAXONOMY_FILE = os.path.join(BASE_DIR, "taxonomy.json")
 LLM_KEY      = os.environ.get("ZOTERO_LLM_API_KEY", "")
 LLM_BASE     = os.environ.get("ZOTERO_LLM_BASE_URL", "https://api.deepseek.com")
 LLM_MODEL    = os.environ.get("ZOTERO_LLM_MODEL", "deepseek-v4-flash")
 BATCH        = 20
 SKIP_TYPES   = {"note", "attachment"}
 
-# 新分类体系: "父/子" 或 "父" (顶级)
-TAXONOMY = {
-    "01-保护区成效": "保护地/国家公园设立与管理成效、森林损失遏制、反事实/匹配评估、保护政策、OECM、保护地网络",
-    "01-保护区成效/几何形状与景观格局": "保护地或景观几何形状、形态学指数、破碎化、核心区-边缘、shape index、景观格局指数",
-    "01-保护区成效/降温效应": "保护地/绿地/生态修复的降温效应、热岛缓解、气候调节",
-    "02-人畜共患病": "土地利用变化与传染病、溢出spillover、新发传染病EID、One Health、景观流行病学、人畜共患病原与临床",
-    "02-人畜共患病/宿主与捕食者生态": "宿主动物(蝙蝠/啮齿/灵长)生态、捕食者-猎物、群落生态(非疾病本体)",
-    "03-贸易与土地利用": "MRIO投入产出、telecoupling贸易遥联、消费驱动土地利用、供应链足迹、远程耦合",
-    "04-方法与工具": "通用统计/计量/因果推断/空间分析/机器学习方法论 (无明显主题应用时)",
-    "04-方法与工具/R包": "R 语言 package 论文 (mgcv/terra/marginaleffects 等)",
-    "04-方法与工具/Meta分析与系统综述": "Meta 分析方法、系统综述方法学",
-    "05-数据集": "以介绍数据集/数据源为主的文献 (Hansen GFC、SoilGrids、ASTER、UCPD、WDPA 等)",
-    "06-议题专题/武装冲突": "武装冲突与环境保护、战争、政治暴力",
-    "06-议题专题/入侵物种": "外来入侵物种、入侵生态学",
-    "06-议题专题/可再生能源": "风电、可再生能源碳减排",
-    "06-议题专题/SDG与全球治理": "SDGs、生物多样性框架(爱知/昆明-蒙特利尔)、全球环境治理",
-    "06-议题专题/生态系统服务与GEP": "生态系统服务评估、GEP核算、自然资本",
-    "07-泛读与动态": "观点/评论/新闻/领域动态、Science/Nat/PNAS 评论、明显泛读性质且无具体主题归属",
-}
+# 分类体系: 从 taxonomy.json 加载 (格式见 taxonomy.example.json); "父/子" 为子分类
+if not os.path.exists(TAXONOMY_FILE):
+    sys.exit("未找到 taxonomy.json — 请复制 taxonomy.example.json 为 taxonomy.json 并改成你的分类体系")
+TAXONOMY = json.load(open(TAXONOMY_FILE, encoding="utf-8"))
 
 SYSTEM_PROMPT = """你是文献库管理员。给定两级分类体系(名称:收录标准)和一批文献(标题/作者/年份/摘要),
 为每条选择最合适的一个分类(可为"父"或"父/子"), 或 null。规则:

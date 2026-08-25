@@ -6,7 +6,8 @@ outputs/
 __pycache__/
 *.pyc
 
-# 分类方案(运行产物)
+# 分类方案(运行产物)与个人分类体系
+scripts/taxonomy.json
 scripts/zotero_classify_plan.json
 scripts/zotero_reorg_plan.json
 scripts/*_selfcontained.js

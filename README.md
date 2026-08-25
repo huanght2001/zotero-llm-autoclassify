@@ -29,7 +29,21 @@ Zotero 本地 API (只读)          OpenAI 兼容 LLM API            Zotero Run 
 
 ## 使用
 
-### 1. 全库重组 / 增量归类（同一工具）
+### 1. 定义你自己的分类体系
+
+复制 `scripts/taxonomy.example.json` 为 `scripts/taxonomy.json`，把键值改成你的分类：
+
+```json
+{
+  "01-研究主题A": "收录标准描述 (给 LLM 的线索, 越具体越准)",
+  "01-研究主题A/子方向": "子分类用 父/子 形式; 有具体子分类时 LLM 优先选它",
+  "02-泛读与动态": "观点/评论/新闻类"
+}
+```
+
+`taxonomy.json` 是个人配置，已被 `.gitignore` 排除，不会上传。
+
+### 2. 运行分类
 
 ```powershell
 $env:ZOTERO_LLM_API_KEY = "sk-..."
@@ -42,11 +56,10 @@ Zotero *Tools → Developer → Run JavaScript* → 勾选 **Run as async functi
 
 结果示例：`重组完成: 归类 802 条, 跳过 86 条, 未找到 2 条`
 
-### 2. 定制你自己的分类体系
+### 3. 定制说明
 
-编辑 `zotero_reorg.py` 中的 `TAXONOMY` 字典即可——键是分类名（`"父/子"` 表示两级），
-值是给 LLM 的收录标准描述。越具体，分类越准。LLM 拿不准时会返回 `null`（宁缺勿滥），
-这些条目保持原状，适合事后人工处理。
+分类标准越具体，LLM 判定越准（写关键词、典型方法、代表对象）。拿不准的条目 LLM 会返回
+`null`（宁缺勿滥），保持原状，适合事后人工处理。
 
 ## 文件一览
 
