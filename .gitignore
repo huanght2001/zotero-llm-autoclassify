@@ -1,0 +1,12 @@
+# 个人文献数据不上传
+outputs/
+*.md.bak
+
+# Python
+__pycache__/
+*.pyc
+
+# 分类方案(运行产物)
+scripts/zotero_classify_plan.json
+scripts/zotero_reorg_plan.json
+scripts/*_selfcontained.js
