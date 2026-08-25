@@ -49,6 +49,9 @@ $env:ZOTERO_LLM_API_KEY = "sk-..."
 python scripts/zotero_reorg.py                      # 整库 (默认)
 python scripts/zotero_reorg.py --scope unfiled      # 只归"不在任何分类"的条目 (增量维护, 最省)
 python scripts/zotero_reorg.py --scope "COLL:PAs"   # 只归某个已有分类内的条目
+python scripts/zotero_reorg.py --review             # 归类后逐条确认 (y/n/a/q)
+python scripts/zotero_reorg.py --multi              # 允许横跨文献归入最多2个分类
+python scripts/zotero_reorg.py --subset "01-,02-"   # 只允许归入指定顶级子树 (省token、防误归)
 python scripts/make_reorg_js.py                     # 生成 reorg_selfcontained.js (方案内嵌)
 ```
 
@@ -57,10 +60,28 @@ Zotero *Tools → Developer → Run JavaScript* → 勾选 **Run as async functi
 
 结果示例：`重组完成: 归类 802 条, 跳过 86 条, 未找到 2 条`
 
-### 3. 定制说明
+### 3. 选项说明
+
+`--subset` 按顶级前缀过滤候选分类树（如 `"01-,02-"`），降低 token 成本并防止误归入不参与
+本次工作的分支。`--review` 在方案生成后逐条显示「标题 → 分类」：`y` 保留 / `n` 跳过该条 /
+`a` 保留剩余全部 / `q` 中止，确认结果写回方案文件。`--multi` 允许横跨两个主题的文献归入
+最多 2 个分类（默认每条 1 个）。
+
+### 4. 定制说明
 
 分类标准越具体，LLM 判定越准（写关键词、典型方法、代表对象）。拿不准的条目 LLM 会返回
-`null`（宁缺勿滥），保持原状，适合事后人工处理。
+`null`（宁缺勿滥），保持原状，适合事后人工处理。`taxonomy.json` 是个人配置，已被
+`.gitignore` 排除，不会上传。
+
+## 同类项目 (See also)
+
+- [justinfjx/zotero-ai-collection](https://github.com/justinfjx/zotero-ai-collection) — Zotero 插件（GUI），右键"AI 智能分类"，从已有分类树推荐路径，带确认对话框
+- [Mor-Li/zotero-llm-classify](https://github.com/Mor-Li/zotero-llm-classify) — LLM 自动归类脚本集
+- [leike0813/zotero-agents](https://github.com/leike0813/zotero-agents) — agentic 工作台，功能更全更重
+- [joaopn/zotero_llm](https://github.com/joaopn/zotero_llm) — 简单的 LLM 整理助手
+
+本工具的差异点：`--survey` 从库抽样归纳分类树初稿、`--scope/--subset` 双重范围控制、
+不依赖任何第三方插件（本地 API 读 + Run JavaScript 写）、API key 只走环境变量。
 
 ## 文件一览
 

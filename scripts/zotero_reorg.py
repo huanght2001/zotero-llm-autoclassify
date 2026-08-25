@@ -106,10 +106,23 @@ def survey():
 
 # ------------------------- 模式2: 归类 -------------------------
 
-def classify(scope):
+def classify(scope, subset=None, multi=False, review=False):
     if not os.path.exists(TAXONOMY_FILE):
         sys.exit("未找到 taxonomy.json — 先运行 --survey 生成初稿, 或复制 taxonomy.example.json 手写")
     taxonomy = json.load(open(TAXONOMY_FILE, encoding="utf-8"))
+
+    # 候选子集: --subset "01-保护区成效,06-议题专题" 只允许归入这些父树
+    if subset:
+        keys = [k.strip() for k in subset.split(",") if k.strip()]
+        allowed = {}
+        for k, v in taxonomy.items():
+            top = k.split("/")[0].strip()
+            if any(top == s.split("/")[0].strip() for s in keys):
+                allowed[k] = v
+        if not allowed:
+            sys.exit(f"--subset 未匹配到任何分类 (可用顶级: {', '.join(sorted({k.split('/')[0] for k in taxonomy}))})")
+        print(f"候选分类子集: {len(allowed)}/{len(taxonomy)} 个 (仅这些可被选)")
+        taxonomy = allowed
 
     print("拉取全库条目 ...")
     items = fetch_all_items()
@@ -136,9 +149,14 @@ def classify(scope):
 1. 只输出 JSON: {"<itemKey>": "<分类名或null>", ...}, 不要其他文字。
 2. 按文献的学术内容判断, 不考虑其原有分类或来历。
 3. 有更具体的子分类时优先选子分类。
-4. 拿不准用 null, 宁缺勿滥。每条只归一个分类。
+4. 拿不准用 null, 宁缺勿滥。
+5. MULTI 每条默认只归一个分类; 仅当文献确实横跨两个分类时, 输出 ["分类1","分类2"] 数组 (最多2个)。
 分类体系:
 """ + "\n".join(f"- {k}: {v}" for k, v in taxonomy.items())
+    if not multi:
+        system = system.replace(
+            "5. MULTI 每条默认只归一个分类; 仅当文献确实横跨两个分类时, 输出 [\"分类1\",\"分类2\"] 数组 (最多2个)。",
+            "5. 每条只归一个分类, 输出单个字符串。")
 
     plan = {}
     for n in range(0, len(targets), BATCH):
@@ -147,15 +165,47 @@ def classify(scope):
                          {"role": "user", "content": json.dumps(batch, ensure_ascii=False)}]))
         print(f"  已分类 {min(n + BATCH, len(targets))}/{len(targets)}")
         time.sleep(0.5)
-    plan = {k: v for k, v in plan.items() if not v or v in taxonomy}
+    # 归一化: 允许值为 字符串/null/列表(多分类); 非法分类名丢弃
+    def norm(v):
+        if v is None:
+            return None
+        vs = v if isinstance(v, list) else [v]
+        vs = [x for x in vs if x in taxonomy]
+        return vs or None
+    plan = {k: norm(v) for k, v in plan.items()}
     json.dump(plan, open(PLAN_FILE, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 
     from collections import Counter
-    dist = Counter(v for v in plan.values() if v)
+    flat = [c for v in plan.values() if v for c in (v if isinstance(v, list) else [v])]
+    dist = Counter(flat)
     print(f"\n方案已写入 {PLAN_FILE}")
-    print(f"归类分布 (共 {sum(dist.values())} 条, null {sum(1 for v in plan.values() if not v)} 条):")
+    print(f"归类分布 (共 {sum(1 for v in plan.values() if v)} 条, 其中多分类 {sum(1 for v in plan.values() if isinstance(v, list))} 条, null {sum(1 for v in plan.values() if not v)} 条):")
     for k, c in sorted(dist.items()):
         print(f"  {k}: {c}")
+
+    # 确认环节: 逐条显示 标题→分类, 可跳过/中止, 剩余的写回方案
+    if review:
+        titles = {i["key"]: (i["data"].get("title", "") or "(无标题)")[:70] for i in targets}
+        print("\n--- 确认环节 (y=保留 / n=跳过该条 / a=保留剩余全部 / q=中止保留已确认) ---")
+        kept = {}
+        for n, (key, v) in enumerate(plan.items()):
+            if not v:
+                continue
+            label = v if isinstance(v, str) else " + ".join(v)
+            ans = input(f"[{n+1}/{len(plan)}] {titles.get(key, key)} → {label} (y/n/a/q): ").strip().lower()
+            if ans == "q":
+                print("(中止: 仅保留此前已确认的条目)")
+                break
+            if ans == "a":
+                kept.update({k: vv for k, vv in plan.items() if vv})
+                print("(保留剩余全部)")
+                break
+            if ans != "n":
+                kept[key] = v
+        plan = kept
+        json.dump(plan, open(PLAN_FILE, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+        print(f"确认后方案: {len(plan)} 条已写回 {PLAN_FILE}")
+
     print("\n→ 下一步: python make_reorg_js.py 生成自包含 JS, 在 Zotero Run JavaScript 中执行")
 
 
@@ -170,7 +220,12 @@ def main():
         scope = sys.argv[sys.argv.index("--scope") + 1]
     if scope not in ("all", "unfiled") and not scope.startswith("COLL:"):
         sys.exit(f"未知范围: {scope} (可选 all / unfiled / COLL:分类名)")
-    classify(scope)
+    subset = None
+    if "--subset" in sys.argv:
+        subset = sys.argv[sys.argv.index("--subset") + 1]
+    multi = "--multi" in sys.argv
+    review = "--review" in sys.argv
+    classify(scope, subset, multi, review)
 
 
 if __name__ == "__main__":

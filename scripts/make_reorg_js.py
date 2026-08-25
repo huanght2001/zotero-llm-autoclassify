@@ -11,9 +11,10 @@ try {
   const plan = __PLAN__;
   const libID = Zotero.Libraries.userLibraryID;
 
-  // 1. 建 "父/子" 两级分类树
+  // 1. 建 "父/子" 两级分类树 (值可为 字符串 或 [字符串数组] 多分类)
   const collMap = {}; // name -> collection
-  const wanted = [...new Set(Object.values(plan).filter(v => v))].sort();
+  const flat = Object.values(plan).flat().filter(v => v);
+  const wanted = [...new Set(flat)].sort();
   for (const full of wanted) {
     const parts = full.split('/');
     let parent = null;
@@ -36,15 +37,20 @@ try {
   // 2. 条目归类 (只追加)
   let ok = 0, miss = 0, skip = 0;
   await Zotero.DB.executeTransaction(async function () {
-    for (const [key, name] of Object.entries(plan)) {
-      if (!name) { skip++; continue; }
+    for (const [key, val] of Object.entries(plan)) {
+      if (!val) { skip++; continue; }
+      const names = Array.isArray(val) ? val : [val];
       const item = await Zotero.Items.getByLibraryAndKeyAsync(libID, key);
       if (!item || item.isNote() || item.isAttachment()) { miss++; continue; }
-      const col = collMap[name];
-      if (item.inCollection(col)) { skip++; continue; }
-      item.addToCollection(col.id);
-      await item.save();
-      ok++;
+      let changed = false;
+      for (const name of names) {
+        const col = collMap[name];
+        if (col && !item.inCollection(col)) {
+          item.addToCollection(col.id);
+          changed = true;
+        }
+      }
+      if (changed) { await item.save(); ok++; } else { skip++; }
     }
   });
   return '重组完成: 归类 ' + ok + ' 条, 跳过 ' + skip + ' 条, 未找到 ' + miss + ' 条';
