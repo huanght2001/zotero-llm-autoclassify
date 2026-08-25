@@ -52,8 +52,10 @@ python scripts/zotero_reorg.py --scope "COLL:PAs"   # 只归某个已有分类�
 python scripts/zotero_reorg.py --review             # 归类后逐条确认 (y/n/a/q)
 python scripts/zotero_reorg.py --multi              # 允许横跨文献归入最多2个分类
 python scripts/zotero_reorg.py --subset "01-,02-"   # 只允许归入指定顶级子树 (省token、防误归)
-python scripts/make_reorg_js.py                     # 生成 reorg_selfcontained.js (方案内嵌)
 ```
+
+归类完成后**自动生成** `scripts/reorg_selfcontained.js`（无需单独命令）。若只想从已有方案
+重新生成 JS（不调 LLM、不需要 API key）：`python scripts/zotero_reorg.py --js-only`。
 
 然后：记事本打开 `scripts/reorg_selfcontained.js` → 全选复制 →
 Zotero *Tools → Developer → Run JavaScript* → 勾选 **Run as async function** → Run。
@@ -76,8 +78,8 @@ Zotero *Tools → Developer → Run JavaScript* → 勾选 **Run as async functi
 
 | 文件 | 作用 |
 |---|---|
-| `scripts/zotero_reorg.py` | 全库/增量 LLM 分类（两级分类体系） |
-| `scripts/make_reorg_js.py` | 把方案 JSON 生成为自包含落库 JS |
+| `scripts/zotero_reorg.py` | 一体化主工具：--survey 归纳分类树 / 分类（--scope/--subset/--multi/--review）/ 生成自包含落库 JS |
+| `scripts/taxonomy.example.json` | 分类体系示例配置 |
 
 ## 安全说明
 

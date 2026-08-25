@@ -1,24 +1,26 @@
 # -*- coding: utf-8 -*-
 """
-zotero_reorg.py — Zotero 文献库 LLM 分类/重组 (只追加新分类, 不动旧分类)
+zotero_reorg.py — Zotero 文献库 LLM 分类/重组 一体化工具 (只追加新分类, 不动旧分类)
 
 用法:
   python zotero_reorg.py --survey          # 模式1: 抽样归纳分类树初稿 → taxonomy.json (供人工审改)
   python zotero_reorg.py                   # 模式2: 按 taxonomy.json 归类 → zotero_reorg_plan.json
-  python zotero_reorg.py --scope unfiled   # 模式2 + 范围限定 (默认 all)
+                                           #        归类完自动生成 reorg_selfcontained.js
+  python zotero_reorg.py --js-only         # 只从已有 plan 重新生成 JS (不调 LLM, 不需要 API key)
 
-范围 (--scope, 模式2可用):
-  all       整库所有条目 (默认)
-  unfiled   只处理不在任何分类中的条目 (增量维护, 最省钱)
-  COLL:名称 只处理指定分类内的条目, 如 --scope "COLL:PAs"
+选项 (模式2):
+  --scope all|unfiled|COLL:名称   处理范围 (默认 all; unfiled=增量维护最省; COLL:PAs=指定分类内)
+  --subset "01-,02-"              候选分类子集, 按顶级前缀过滤 (省 token、防误归)
+  --multi                         允许横跨文献归入最多 2 个分类
+  --review                        归类后逐条确认 (y=保留 n=跳过 a=保留剩余全部 q=中止)
 
 前置:
   1. Zotero 已打开, 且 设置→高级 中允许本地 API 通信
   2. $env:ZOTERO_LLM_API_KEY = "sk-..."  (任意 OpenAI 兼容接口, 可选 BASE_URL/MODEL)
   3. 模式2 需要 taxonomy.json (可由 --survey 生成, 或复制 taxonomy.example.json 手写)
 
-落库: 本地 API 只读 → python make_reorg_js.py 生成自包含 JS →
-      Zotero Tools→Developer→Run JavaScript (勾选"作为异步函数运行") 执行。
+落库: 本地 API 只读 → 归类完自动生成 reorg_selfcontained.js →
+      记事本全选复制 → Zotero Tools→Developer→Run JavaScript (勾选"作为异步函数运行") 执行。
 """
 import json, os, sys, time, urllib.request
 
@@ -26,6 +28,7 @@ ZOTERO_LOCAL = "http://127.0.0.1:23119/api/users/0"
 BASE_DIR     = os.path.dirname(os.path.abspath(__file__))
 PLAN_FILE    = os.path.join(BASE_DIR, "zotero_reorg_plan.json")
 TAXONOMY_FILE = os.path.join(BASE_DIR, "taxonomy.json")
+JS_FILE      = os.path.join(BASE_DIR, "reorg_selfcontained.js")
 LLM_KEY      = os.environ.get("ZOTERO_LLM_API_KEY", "")
 LLM_BASE     = os.environ.get("ZOTERO_LLM_BASE_URL", "https://api.deepseek.com")
 LLM_MODEL    = os.environ.get("ZOTERO_LLM_MODEL", "deepseek-v4-flash")
@@ -111,7 +114,7 @@ def classify(scope, subset=None, multi=False, review=False):
         sys.exit("未找到 taxonomy.json — 先运行 --survey 生成初稿, 或复制 taxonomy.example.json 手写")
     taxonomy = json.load(open(TAXONOMY_FILE, encoding="utf-8"))
 
-    # 候选子集: --subset "01-保护区成效,06-议题专题" 只允许归入这些父树
+    # 候选子集: --subset "01-,02-" 只允许归入这些父树
     if subset:
         keys = [k.strip() for k in subset.split(",") if k.strip()]
         allowed = {}
@@ -206,10 +209,80 @@ def classify(scope, subset=None, multi=False, review=False):
         json.dump(plan, open(PLAN_FILE, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
         print(f"确认后方案: {len(plan)} 条已写回 {PLAN_FILE}")
 
-    print("\n→ 下一步: python make_reorg_js.py 生成自包含 JS, 在 Zotero Run JavaScript 中执行")
+    make_js(plan)
 
+
+# ------------------------- 落库 JS 生成 -------------------------
+
+JS_TEMPLATE = r'''// reorg_selfcontained.js - Zotero Run JavaScript (勾选"作为异步函数运行") 中直接运行
+// 新旧并存: 自动创建新分类树(含子分类), 条目追加新分类, 不移除任何旧分类
+try {
+  const plan = __PLAN__;
+  const libID = Zotero.Libraries.userLibraryID;
+
+  // 1. 建 "父/子" 两级分类树 (值可为 字符串 或 [字符串数组] 多分类)
+  const collMap = {}; // name -> collection
+  const flat = Object.values(plan).flat().filter(v => v);
+  const wanted = [...new Set(flat)].sort();
+  for (const full of wanted) {
+    const parts = full.split('/');
+    let parent = null;
+    for (const name of parts) {
+      const siblings = await Zotero.Collections.getByLibrary(libID);
+      let c = siblings.find(x => x.name === name &&
+        ((parent === null && !x.parentID) || (parent !== null && x.parentID === parent.id)));
+      if (!c) {
+        c = new Zotero.Collection();
+        c.libraryID = libID;
+        c.name = name;
+        if (parent) c.parentID = parent.id;
+        await c.saveTx();
+      }
+      parent = c;
+    }
+    collMap[full] = parent;
+  }
+
+  // 2. 条目归类 (只追加)
+  let ok = 0, miss = 0, skip = 0;
+  await Zotero.DB.executeTransaction(async function () {
+    for (const [key, val] of Object.entries(plan)) {
+      if (!val) { skip++; continue; }
+      const names = Array.isArray(val) ? val : [val];
+      const item = await Zotero.Items.getByLibraryAndKeyAsync(libID, key);
+      if (!item || item.isNote() || item.isAttachment()) { miss++; continue; }
+      let changed = false;
+      for (const name of names) {
+        const col = collMap[name];
+        if (col && !item.inCollection(col)) {
+          item.addToCollection(col.id);
+          changed = true;
+        }
+      }
+      if (changed) { await item.save(); ok++; } else { skip++; }
+    }
+  });
+  return '重组完成: 归类 ' + ok + ' 条, 跳过 ' + skip + ' 条, 未找到 ' + miss + ' 条';
+} catch (e) {
+  return '出错: ' + e + ' | ' + (e.stack || '');
+}'''
+
+
+def make_js(plan):
+    js = JS_TEMPLATE.replace("__PLAN__", json.dumps(plan, ensure_ascii=False))
+    open(JS_FILE, "w", encoding="utf-8").write(js)
+    print(f"\n✅ 自包含落库脚本已生成: {JS_FILE} ({len(plan)} 条)")
+    print("→ 记事本打开全选复制, 在 Zotero Tools→Developer→Run JavaScript (勾选\"作为异步函数运行\") 中运行")
+
+
+# ------------------------- 入口 -------------------------
 
 def main():
+    if "--js-only" in sys.argv:
+        if not os.path.exists(PLAN_FILE):
+            sys.exit(f"未找到 {PLAN_FILE} — 先运行归类生成方案")
+        make_js(json.load(open(PLAN_FILE, encoding="utf-8")))
+        return
     if not LLM_KEY:
         sys.exit("请先设置 ZOTERO_LLM_API_KEY 环境变量")
     if "--survey" in sys.argv:
