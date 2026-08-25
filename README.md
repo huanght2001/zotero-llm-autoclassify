@@ -29,17 +29,7 @@ Zotero 本地 API (只读)          OpenAI 兼容 LLM API            Zotero Run 
 
 ## 使用
 
-### 1. 归类未分类条目（增量维护）
-
-```powershell
-$env:ZOTERO_LLM_API_KEY = "sk-..."        # 任意 OpenAI 兼容服务
-# 可选: ZOTERO_LLM_BASE_URL / ZOTERO_LLM_MODEL
-
-python scripts/zotero_autoclassify.py            # dry-run: 生成 zotero_classify_plan.json
-python scripts/zotero_autoclassify.py --apply    # 尝试本地 API 写(若 501 走下面 JS)
-```
-
-### 2. 全库重组（新分类体系）
+### 1. 全库重组 / 增量归类（同一工具）
 
 ```powershell
 $env:ZOTERO_LLM_API_KEY = "sk-..."
@@ -52,7 +42,7 @@ Zotero *Tools → Developer → Run JavaScript* → 勾选 **Run as async functi
 
 结果示例：`重组完成: 归类 802 条, 跳过 86 条, 未找到 2 条`
 
-### 3. 定制你自己的分类体系
+### 2. 定制你自己的分类体系
 
 编辑 `zotero_reorg.py` 中的 `TAXONOMY` 字典即可——键是分类名（`"父/子"` 表示两级），
 值是给 LLM 的收录标准描述。越具体，分类越准。LLM 拿不准时会返回 `null`（宁缺勿滥），
@@ -62,10 +52,8 @@ Zotero *Tools → Developer → Run JavaScript* → 勾选 **Run as async functi
 
 | 文件 | 作用 |
 |---|---|
-| `scripts/zotero_autoclassify.py` | 未分类条目 → LLM 归类（单级分类体系） |
-| `scripts/zotero_reorg.py` | 全库重组（两级分类体系，主力工具） |
+| `scripts/zotero_reorg.py` | 全库/增量 LLM 分类（两级分类体系） |
 | `scripts/make_reorg_js.py` | 把方案 JSON 生成为自包含落库 JS |
-| `scripts/apply_plan.js` | 旧版落库 JS（读文件，保留参考） |
 
 > 分类方案 JSON 与个人文献清单属于私人数据，已通过 `.gitignore` 排除在本仓库之外。
 
