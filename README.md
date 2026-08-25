@@ -90,18 +90,6 @@ Zotero *Tools → Developer → Run JavaScript* → 勾选 **Run as async functi
 | `scripts/zotero_reorg.py` | 全库/增量 LLM 分类（两级分类体系） |
 | `scripts/make_reorg_js.py` | 把方案 JSON 生成为自包含落库 JS |
 
-> 分类方案 JSON 与个人文献清单属于私人数据，已通过 `.gitignore` 排除在本仓库之外。
-
-## 已知坑（亲测）
-
-| 坑 | 解法 |
-|---|---|
-| Windows `python` 运行无输出直接退出 | 商店占位程序，用完整路径的真 Python |
-| 本地 API 写返回 HTTP 501 | Zotero 7 本地 API 只读，落库走 Run JavaScript |
-| Run JavaScript 返回 `undefined` | 未勾选 "Run as async function" |
-| `NS_ERROR_FILE_UNRECOGNIZED_PATH` | Run JS 中读文件不可靠 → 改用方案内嵌的自包含 JS |
-| 生成的 JS 报 `unescaped line break` | Python 生成时用原始字符串，防止 `\n` 被转义 |
-
 ## 安全说明
 
 - API key 只从环境变量读取，代码与仓库中不存储任何密钥
