@@ -1,4 +1,4 @@
-# zotero-tools
+# zotero-llm-autoclassify
 
 **用 LLM 给 Zotero 文献库自动分类/重组的轻量工具链** —— 纯 Python 标准库，零依赖；本地 API 读取 + LLM 语义分类 + Run JavaScript 安全落库。
 
