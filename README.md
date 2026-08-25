@@ -29,26 +29,27 @@ Zotero 本地 API (只读)          OpenAI 兼容 LLM API            Zotero Run 
 
 ## 使用
 
-### 1. 定义你自己的分类体系
+### 1. 获得分类体系（二选一）
 
-复制 `scripts/taxonomy.example.json` 为 `scripts/taxonomy.json`，把键值改成你的分类：
+**方式 A — 让 LLM 从你的库里归纳**（推荐起步）：
 
-```json
-{
-  "01-研究主题A": "收录标准描述 (给 LLM 的线索, 越具体越准)",
-  "01-研究主题A/子方向": "子分类用 父/子 形式; 有具体子分类时 LLM 优先选它",
-  "02-泛读与动态": "观点/评论/新闻类"
-}
+```powershell
+python scripts/zotero_reorg.py --survey
 ```
 
-`taxonomy.json` 是个人配置，已被 `.gitignore` 排除，不会上传。
+均匀抽样 250 条 → LLM 分析主题分布 → 生成分类树初稿 `scripts/taxonomy.json`（两级、带收录标准、
+大主题自动拆子分类、含兜底分类）。**你只需人工审改**：改名、删掉不想要的簇、微调收录标准。
 
-### 2. 运行分类
+**方式 B — 手写**：复制 `scripts/taxonomy.example.json` 为 `scripts/taxonomy.json` 自行编辑。
+
+### 2. 运行分类（可选范围）
 
 ```powershell
 $env:ZOTERO_LLM_API_KEY = "sk-..."
-python scripts/zotero_reorg.py        # 全库判定 → zotero_reorg_plan.json
-python scripts/make_reorg_js.py       # 生成 reorg_selfcontained.js (方案内嵌)
+python scripts/zotero_reorg.py                      # 整库 (默认)
+python scripts/zotero_reorg.py --scope unfiled      # 只归"不在任何分类"的条目 (增量维护, 最省)
+python scripts/zotero_reorg.py --scope "COLL:PAs"   # 只归某个已有分类内的条目
+python scripts/make_reorg_js.py                     # 生成 reorg_selfcontained.js (方案内嵌)
 ```
 
 然后：记事本打开 `scripts/reorg_selfcontained.js` → 全选复制 →
